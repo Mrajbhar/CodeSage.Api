@@ -1,0 +1,6 @@
+@CodeSage.Api_HostAddress = http://localhost:5067
+
+GET {{CodeSage.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
