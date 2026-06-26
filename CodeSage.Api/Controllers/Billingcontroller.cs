@@ -16,11 +16,12 @@ public class BillingController : ControllerBase
     private readonly MongoContext _db;
     private readonly BillingService _billing;
     private readonly UsageService _usage;
+    private readonly AuditService _audit;
     private readonly string _rzpKeyId;
 
-    public BillingController(MongoContext db, BillingService billing, UsageService usage, RazorpayClient rzp)
+    public BillingController(MongoContext db, BillingService billing, UsageService usage, RazorpayClient rzp, AuditService audit)
     {
-        _db = db; _billing = billing; _usage = usage; _rzpKeyId = rzp.KeyId;
+        _db = db; _billing = billing; _usage = usage; _rzpKeyId = rzp.KeyId; _audit = audit;
     }
 
 
@@ -54,7 +55,28 @@ public class BillingController : ControllerBase
     {
         if (!await CanManageAsync(orgId)) return Forbid();
         var result = await _billing.CheckoutAsync(orgId, req.Plan);
+        if (result.Mode == "simulated")
+        {
+            var actor = User.FindFirstValue("displayName") ?? "Someone";
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            await _audit.LogAsync(orgId, uid, actor, "plan.changed", req.Plan);
+        }
         return Ok(result);
+    }
+
+    // Confirms a one-time order payment (dev/order mode), then flips the plan.
+    [HttpPost("verify")]
+    public async Task<IActionResult> Verify([FromQuery] string orgId, VerifyRequest req)
+    {
+        if (!await CanManageAsync(orgId)) return Forbid();
+        var ok = await _billing.VerifyOrderPaymentAsync(
+            orgId, req.Plan, req.RazorpayOrderId, req.RazorpayPaymentId, req.RazorpaySignature);
+        if (!ok) return BadRequest(new { message = "Payment signature verification failed." });
+
+        var actor = User.FindFirstValue("displayName") ?? "Someone";
+        var uid = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        await _audit.LogAsync(orgId, uid, actor, "plan.changed", req.Plan);
+        return Ok(new { ok = true });
     }
     private async Task<bool> IsMemberAsync(string orgId)
     {

@@ -108,6 +108,16 @@ public class GitHubService
             .ToList();
     }
 
+    // Posts CodeSage's findings back onto the GitHub PR as a comment.
+    public async Task PostIssueCommentAsync(string token, string fullName, int number, string body)
+    {
+        var client = _http.CreateClient();
+        var req = Authed(HttpMethod.Post, $"https://api.github.com/repos/{fullName}/issues/{number}/comments", token);
+        req.Content = JsonContent.Create(new { body });
+        var resp = await client.SendAsync(req);
+        resp.EnsureSuccessStatusCode();
+    }
+
     public async Task<string> GetPullDiffAsync(string token, string fullName, int number)
     {
         var client = _http.CreateClient();

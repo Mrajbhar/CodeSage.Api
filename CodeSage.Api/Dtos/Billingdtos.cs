@@ -7,4 +7,5 @@ public record BillingEventDto(string Type, string Plan, int AmountCents, string?
 public record BillingSummaryDto(string Plan, UsageDto Usage, List<UsagePeriodDto> History, List<BillingEventDto> Events, bool BillingLive);
 
 public record CheckoutRequest(string Plan);
-public record CheckoutResultDto(bool Simulated, string? Url, string Message);
+public record CheckoutResultDto(string Mode, string? OrderId, string? SubscriptionId, int Amount, string Message);
+public record VerifyRequest(string Plan, string RazorpayOrderId, string RazorpayPaymentId, string RazorpaySignature);

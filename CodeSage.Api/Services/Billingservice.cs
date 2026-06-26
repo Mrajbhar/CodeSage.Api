@@ -7,9 +7,13 @@ using MongoDB.Driver;
 
 namespace CodeSage.Api.Services;
 
-// Phase 3 #3/#5: plans, Razorpay subscription checkout, and billing history.
-// Live Razorpay is gated behind a configured KeyId+KeySecret; without it, upgrades
-// are simulated so the whole flow remains usable in development.
+// Phase 3 #3/#5: plans, Razorpay checkout (subscription OR one-time order), billing history.
+// Modes:
+//   simulated    — no keys: plan flips instantly (pure dev).
+//   subscription — keys + a plan_id configured: recurring Razorpay subscription.
+//   order        — keys but NO plan_id: one-time Razorpay order, so you can test the
+//                  real gateway without creating dashboard plans. Confirmed client-side
+//                  via signature verification (no webhook needed).
 public class BillingService
 {
     private readonly MongoContext _db;
@@ -42,66 +46,81 @@ public class BillingService
     {
         var plan = PlanCatalog.Get(planId);
         var org = await _db.Organizations.Find(o => o.Id == orgId).FirstOrDefaultAsync();
-        if (org is null) return new CheckoutResultDto(false, null, "Organization not found.");
+        if (org is null) return new CheckoutResultDto("error", null, null, 0, "Organization not found.");
 
-        // Downgrade to Free: cancel any active subscription and flip immediately.
+        // Downgrade to Free: cancel any subscription, flip immediately.
         if (plan.Id == "free")
         {
             if (IsLive && org.RazorpaySubscriptionId is not null)
             {
-                try { await _rzp.CancelSubscriptionAsync(org.RazorpaySubscriptionId); }
-                catch { /* webhook will eventually reconcile */ }
+                try { await _rzp.CancelSubscriptionAsync(org.RazorpaySubscriptionId); } catch { }
             }
-            await ApplyPlanAsync(org, plan, "downgrade", note: IsLive ? "Subscription cancelled" : "Simulated downgrade");
-            return new CheckoutResultDto(true, null, "Switched to Free.");
+            await ApplyPlanAsync(org, plan, "downgrade", IsLive ? "Subscription cancelled" : "Simulated downgrade");
+            return new CheckoutResultDto("simulated", null, null, 0, "Switched to Free.");
         }
 
+        // No keys -> simulated flip.
         if (!IsLive)
         {
             var prev = PlanCatalog.Get(org.Plan);
             await ApplyPlanAsync(org, plan, plan.PriceCents >= prev.PriceCents ? "upgrade" : "downgrade",
-                note: "Simulated (no Razorpay keys configured)");
-            return new CheckoutResultDto(true, null, $"Switched to {plan.Name} (simulated).");
+                "Simulated (no Razorpay keys configured)");
+            return new CheckoutResultDto("simulated", null, null, 0, $"Switched to {plan.Name} (simulated).");
         }
 
-        // Live path: create a Razorpay subscription and hand it to the browser.
         var planRef = plan.Id == "pro" ? _billing.ProPlanId : _billing.TeamPlanId;
-        if (string.IsNullOrWhiteSpace(planRef))
-            return new CheckoutResultDto(false, null,
-                $"Set Billing:{(plan.Id == "pro" ? "ProPlanId" : "TeamPlanId")} in appsettings to the Razorpay plan_id for {plan.Name}.");
 
+        // Keys + a plan_id -> real recurring subscription.
+        if (!string.IsNullOrWhiteSpace(planRef))
+        {
+            try
+            {
+                var sub = await _rzp.CreateSubscriptionAsync(planRef, orgId);
+                org.RazorpaySubscriptionId = sub.Id;
+                org.RazorpaySubscriptionStatus = sub.Status;
+                await _db.Organizations.ReplaceOneAsync(o => o.Id == orgId, org);
+                return new CheckoutResultDto("subscription", null, sub.Id, plan.PriceCents,
+                    $"Authorize the recurring payment to switch to {plan.Name}.");
+            }
+            catch (Exception ex)
+            {
+                return new CheckoutResultDto("error", null, null, 0, "Razorpay subscription failed. " + ex.Message);
+            }
+        }
+
+        // Keys but NO plan_id -> one-time order so the gateway can still be tested.
         try
         {
-            var sub = await _rzp.CreateSubscriptionAsync(planRef, orgId);
-            org.RazorpaySubscriptionId = sub.Id;
-            org.RazorpaySubscriptionStatus = sub.Status;
-            await _db.Organizations.ReplaceOneAsync(o => o.Id == orgId, org);
-
-            // Returning `subscriptionId` lets the browser open Razorpay Checkout with it.
-            // The plan does NOT change until the webhook tells us it's been authenticated/activated.
-            return new CheckoutResultDto(false,
-                sub.Id,  // we reuse the Url field on the DTO to carry the subscription id
-                $"Razorpay subscription created. Authorize the recurring payment to switch to {plan.Name}.");
+            var orderId = await _rzp.CreateOrderAsync(plan.PriceCents, $"org_{orgId}_{plan.Id}");
+            return new CheckoutResultDto("order", orderId, null, plan.PriceCents,
+                $"Complete the payment to switch to {plan.Name}.");
         }
         catch (Exception ex)
         {
-            return new CheckoutResultDto(false, null,
-                "Razorpay refused the subscription. " + ex.Message);
+            return new CheckoutResultDto("error", null, null, 0, "Razorpay order failed. " + ex.Message);
         }
     }
 
-    // Called by RazorpayWebhookController after signature is verified.
+    // Called after a one-time order payment succeeds in the browser.
+    public async Task<bool> VerifyOrderPaymentAsync(string orgId, string planId, string orderId, string paymentId, string signature)
+    {
+        if (!_rzp.VerifyPaymentSignature(orderId, paymentId, signature)) return false;
+
+        var plan = PlanCatalog.Get(planId);
+        var org = await _db.Organizations.Find(o => o.Id == orgId).FirstOrDefaultAsync();
+        if (org is null) return false;
+
+        await ApplyPlanAsync(org, plan, "charge", $"One-time payment ({paymentId})");
+        return true;
+    }
+
+    // Webhook path (recurring subscriptions).
     public async Task HandleWebhookEventAsync(string eventType, string subscriptionId, string status, int amountPaise)
     {
         var org = await _db.Organizations.Find(o => o.RazorpaySubscriptionId == subscriptionId).FirstOrDefaultAsync();
         if (org is null) return;
-
         org.RazorpaySubscriptionStatus = status;
-
-        // Decide which plan id this subscription corresponds to.
-        var planId = subscriptionId == org.RazorpaySubscriptionId
-            ? GuessPlanFromSettings(amountPaise)
-            : org.Plan;
+        var planId = GuessPlanFromAmount(amountPaise);
 
         switch (eventType)
         {
@@ -111,25 +130,21 @@ public class BillingService
                 await _db.Organizations.ReplaceOneAsync(o => o.Id == org.Id, org);
                 await RecordEventAsync(org.Id!, "upgrade", org.Plan, amountPaise, "Activated via Razorpay");
                 break;
-
             case "subscription.charged":
                 await _db.Organizations.ReplaceOneAsync(o => o.Id == org.Id, org);
                 await RecordEventAsync(org.Id!, "charge", org.Plan, amountPaise, "Monthly charge");
                 break;
-
             case "subscription.cancelled":
             case "subscription.halted":
-                org.Plan = "free";
-                org.RazorpaySubscriptionId = null;
+                org.Plan = "free"; org.RazorpaySubscriptionId = null;
                 await _db.Organizations.ReplaceOneAsync(o => o.Id == org.Id, org);
                 await RecordEventAsync(org.Id!, "downgrade", "free", 0, $"Subscription {eventType.Split('.')[1]}");
                 break;
         }
     }
 
-    private string GuessPlanFromSettings(int amountPaise)
+    private static string GuessPlanFromAmount(int amountPaise)
     {
-        // The webhook payload carries the amount; map it back to a plan.
         if (amountPaise == PlanCatalog.Pro.PriceCents) return "pro";
         if (amountPaise == PlanCatalog.Team.PriceCents) return "team";
         return "free";
@@ -144,11 +159,5 @@ public class BillingService
 
     private Task RecordEventAsync(string orgId, string type, string plan, int amount, string? note) =>
         _db.BillingEvents.InsertOneAsync(new BillingEvent
-        {
-            OrgId = orgId,
-            Type = type,
-            Plan = plan,
-            AmountCents = amount,
-            Note = note
-        });
+        { OrgId = orgId, Type = type, Plan = plan, AmountCents = amount, Note = note });
 }

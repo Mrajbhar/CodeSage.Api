@@ -63,6 +63,34 @@ public class RazorpayClient
         resp.EnsureSuccessStatusCode();
     }
 
+    // One-time order — needs only an amount, no dashboard plan_id.
+    // Lets you exercise the real Razorpay gateway in development.
+    public async Task<string> CreateOrderAsync(int amountPaise, string receipt)
+    {
+        var client = Authed();
+        var body = new { amount = amountPaise, currency = "INR", receipt, payment_capture = 1 };
+
+        var resp = await client.PostAsJsonAsync("https://api.razorpay.com/v1/orders", body);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var detail = await resp.Content.ReadAsStringAsync();
+            throw new InvalidOperationException($"Razorpay order {(int)resp.StatusCode}: {detail}");
+        }
+        var doc = await resp.Content.ReadFromJsonAsync<JsonElement>();
+        return doc.GetProperty("id").GetString()!;
+    }
+
+    // After a one-time payment, Razorpay signs (order_id|payment_id) with your KeySecret.
+    public bool VerifyPaymentSignature(string orderId, string paymentId, string signature)
+    {
+        if (string.IsNullOrWhiteSpace(signature) || string.IsNullOrWhiteSpace(_b.KeySecret)) return false;
+        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_b.KeySecret));
+        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes($"{orderId}|{paymentId}"));
+        var hex = Convert.ToHexString(hash).ToLowerInvariant();
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.ASCII.GetBytes(hex), Encoding.ASCII.GetBytes(signature));
+    }
+
     // Razorpay signs every webhook with HMAC-SHA256 over the raw request body
     // using your WebhookSecret. We compare the hex digest against the X-Razorpay-Signature header.
     public bool VerifyWebhookSignature(string rawBody, string? signatureHeader)

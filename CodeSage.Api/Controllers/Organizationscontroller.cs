@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using CodeSage.Api.Data;
 using CodeSage.Api.Dtos;
+using CodeSage.Api.Services;
 using CodeSage.Api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,7 +17,15 @@ namespace CodeSage.Api.Controllers;
 public class OrganizationsController : ControllerBase
 {
     private readonly MongoContext _db;
-    public OrganizationsController(MongoContext db) => _db = db;
+    private readonly AuditService _audit;
+    private readonly NotificationService _notify;
+    private readonly Services.Email.IEmailSender _email;
+    private readonly Settings.AppSettings _app;
+    public OrganizationsController(MongoContext db, AuditService audit, NotificationService notify,
+        Services.Email.IEmailSender email, Microsoft.Extensions.Options.IOptions<Settings.AppSettings> app)
+    {
+        _db = db; _audit = audit; _notify = notify; _email = email; _app = app.Value;
+    }
 
     // ---- organizations ----
     [HttpGet]
@@ -41,6 +50,7 @@ public class OrganizationsController : ControllerBase
             Members = { new Membership { UserId = Uid()!, Email = Email(), DisplayName = DisplayName(), Role = "Owner" } }
         };
         await _db.Organizations.InsertOneAsync(org);
+        await _audit.LogAsync(org.Id!, Uid(), DisplayName(), "org.created", org.Name);
         return Ok(ToDto(org, Uid()));
     }
 
@@ -68,16 +78,31 @@ public class OrganizationsController : ControllerBase
         if (org.Members.Any(m => m.Email.ToLowerInvariant() == email))
             return BadRequest(new { message = "That person is already a member." });
 
+        // Phase 3 #3: enforce the plan's member cap (members + outstanding invites).
+        var limit = Services.PlanCatalog.Get(org.Plan).MemberLimit;
+        var pendingForOthers = org.Invitations.Count(i => i.Email.ToLowerInvariant() != email);
+        if (org.Members.Count + pendingForOthers >= limit)
+            return BadRequest(new { message = $"Your {org.Plan} plan allows up to {limit} members. Upgrade to invite more." });
+
         var invite = new Invitation
         {
-            Email = email,
-            Role = role,
-            InvitedBy = DisplayName(),
+            Email = email, Role = role, InvitedBy = DisplayName(),
             Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant()
         };
         org.Invitations.RemoveAll(i => i.Email.ToLowerInvariant() == email);
         org.Invitations.Add(invite);
         await Save(org);
+        await _audit.LogAsync(org.Id!, Uid(), DisplayName(), "member.invited", $"{email} as {role}");
+        await _notify.SendToOrgAsync(org.Id!, "member.invited", $"{DisplayName()} invited {email}");
+
+        // Email the invite link (console in dev, SMTP in prod).
+        var link = $"{_app.FrontendBaseUrl}/invite?token={invite.Token}";
+        try
+        {
+            await _email.SendAsync(email, $"You're invited to {org.Name} on CodeSage",
+                $"<p>{DisplayName()} invited you to join <b>{org.Name}</b> as {role}.</p><p>Accept here: <a href=\"{link}\">{link}</a></p><p>Or sign in and open the Team page to accept.</p>");
+        }
+        catch { /* don't fail the invite if email delivery hiccups */ }
 
         return Ok(new InviteDto(invite.Email, invite.Role, invite.Token, invite.CreatedAt));
     }
@@ -105,8 +130,27 @@ public class OrganizationsController : ControllerBase
             org.Members.Add(new Membership { UserId = Uid()!, Email = Email(), DisplayName = DisplayName(), Role = invite.Role });
         org.Invitations.RemoveAll(i => i.Token == req.Token);
         await Save(org);
+        await _audit.LogAsync(org.Id!, Uid(), DisplayName(), "member.joined", DisplayName());
+        await _notify.SendToOrgAsync(org.Id!, "member.joined", $"{DisplayName()} joined {org.Name}");
 
         return Ok(ToDto(org, Uid()));
+    }
+
+    // Invitations addressed to the signed-in user's email — powers the in-app "pending invites" inbox.
+    [HttpGet("invites/pending")]
+    public async Task<IActionResult> PendingForMe()
+    {
+        var email = Email().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(email)) return Ok(Array.Empty<object>());
+
+        var orgs = await _db.Organizations
+            .Find(o => o.Invitations.Any(i => i.Email == email)).ToListAsync();
+
+        var result = orgs.SelectMany(o => o.Invitations
+            .Where(i => i.Email.ToLowerInvariant() == email)
+            .Select(i => new PendingInviteDto(o.Id!, o.Name, i.Role, i.Token, i.InvitedBy, i.CreatedAt)));
+
+        return Ok(result);
     }
 
     // ---- members ----
@@ -126,6 +170,7 @@ public class OrganizationsController : ControllerBase
 
         member.Role = role;
         await Save(org);
+        await _audit.LogAsync(org.Id!, Uid(), DisplayName(), "member.role_changed", $"{member.DisplayName} -> {role}");
         return Ok(ToDetail(org, Uid()));
     }
 
@@ -145,6 +190,7 @@ public class OrganizationsController : ControllerBase
 
         org.Members.RemoveAll(m => m.UserId == userId);
         await Save(org);
+        await _audit.LogAsync(org.Id!, Uid(), DisplayName(), "member.removed", member.DisplayName);
         return NoContent();
     }
 

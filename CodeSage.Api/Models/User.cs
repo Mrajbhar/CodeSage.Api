@@ -23,6 +23,9 @@ public class User
     // Google link
     public string? GoogleId { get; set; }
 
+    public string? PasswordResetToken { get; set; }
+    public DateTime? PasswordResetExpires { get; set; }
+
     public List<RefreshToken> RefreshTokens { get; set; } = new();
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

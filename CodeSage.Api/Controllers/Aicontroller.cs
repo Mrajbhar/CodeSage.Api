@@ -18,10 +18,11 @@ public class AiController : ControllerBase
     private readonly MongoContext _db;
     private readonly OrgContext _org;
     private readonly UsageService _usage;
+    private readonly AuditService _audit;
 
-    public AiController(AiService ai, GitHubService github, MongoContext db, OrgContext org, UsageService usage)
+    public AiController(AiService ai, GitHubService github, MongoContext db, OrgContext org, UsageService usage, AuditService audit)
     {
-        _ai = ai; _github = github; _db = db; _org = org; _usage = usage;
+        _ai = ai; _github = github; _db = db; _org = org; _usage = usage; _audit = audit;
     }
 
     [HttpPost("explain")]
@@ -77,6 +78,22 @@ public class AiController : ControllerBase
 
             var result = await _ai.ReviewDiffAsync(diff, $"{req.FullName} #{req.Number}");
             await _usage.IncrementAsync(orgId!, "review");
+
+            // Persist so it shows up under "Recent reviews" on the dashboard.
+            await _db.Reviews.InsertOneAsync(new Models.Review
+            {
+                OrgId = orgId!,
+                RepoFullName = req.FullName,
+                PullNumber = req.Number,
+                Title = string.IsNullOrWhiteSpace(req.Title) ? $"{req.FullName} #{req.Number}" : req.Title!,
+                Summary = result.Summary,
+                CommentCount = result.Comments.Count,
+                CriticalCount = result.Comments.Count(c => c.Severity == "critical"),
+                RanByUserId = userId!,
+                RanByName = User.FindFirstValue("displayName") ?? "Someone"
+            });
+            await _audit.LogAsync(orgId!, userId, User.FindFirstValue("displayName") ?? "Someone", "review.ran", $"{req.FullName} #{req.Number}");
+
             return Ok(result);
         }
         catch (Exception ex)
