@@ -100,7 +100,7 @@ public class OAuthService
         user.GitHubAccessToken = ghToken;
         user.AvatarUrl ??= profile.AvatarUrl;
 
-        if (user.Id is null) await _db.Users.InsertOneAsync(user);
+        if (user.Id is null) { user.EmailVerified = true; await _db.Users.InsertOneAsync(user); }
         else await _db.Users.ReplaceOneAsync(u => u.Id == user.Id, user);
 
         return await _auth.IssueForUserAsync(user);
@@ -136,7 +136,7 @@ public class OAuthService
         user.GoogleId = info.Sub;
         user.AvatarUrl ??= info.Picture;
 
-        if (user.Id is null) await _db.Users.InsertOneAsync(user);
+        if (user.Id is null) { user.EmailVerified = true; await _db.Users.InsertOneAsync(user); }
         else await _db.Users.ReplaceOneAsync(u => u.Id == user.Id, user);
 
         return await _auth.IssueForUserAsync(user);

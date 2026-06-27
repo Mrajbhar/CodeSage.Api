@@ -6,6 +6,7 @@ using CodeSage.Api.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 
@@ -21,11 +22,12 @@ public class AuthController : ControllerBase
     private readonly MongoContext _db;
     private readonly AppSettings _app;
     private readonly Services.Email.IEmailSender _email;
+    private readonly ILogger<AuthController> _log;
 
     public AuthController(AuthService auth, OAuthService oauth, TokenService tokens,
-        MongoContext db, IOptions<AppSettings> app, Services.Email.IEmailSender email)
+        MongoContext db, IOptions<AppSettings> app, Services.Email.IEmailSender email, ILogger<AuthController> log)
     {
-        _auth = auth; _oauth = oauth; _tokens = tokens; _db = db; _app = app.Value; _email = email;
+        _auth = auth; _oauth = oauth; _tokens = tokens; _db = db; _app = app.Value; _email = email; _log = log;
     }
 
     // ---------- email / password ----------
@@ -33,16 +35,56 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterRequest req)
     {
-        var result = await _auth.RegisterAsync(req);
-        return result is null ? Conflict(new { message = "Email is already registered." }) : Ok(result);
+        var user = await _auth.RegisterAsync(req);
+        if (user is null) return Conflict(new { message = "Email is already registered." });
+
+        await SendVerificationEmailAsync(user);
+        return Ok(new { needsVerification = true, message = "Check your email to verify your account, then sign in." });
     }
 
     [EnableRateLimiting("auth")]
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest req)
     {
-        var result = await _auth.LoginAsync(req);
-        return result is null ? Unauthorized(new { message = "Invalid email or password." }) : Ok(result);
+        var (resp, error) = await _auth.LoginAsync(req);
+        if (resp is not null) return Ok(resp);
+        if (error == "verify")
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new { needsVerification = true, message = "Please verify your email before signing in." });
+        return Unauthorized(new { message = "Invalid email or password." });
+    }
+
+    [HttpPost("verify-email")]
+    public async Task<IActionResult> VerifyEmail(VerifyEmailRequest req)
+    {
+        var result = await _auth.VerifyEmailAsync(req.Token);
+        return result == AuthService.VerifyResult.Invalid
+            ? BadRequest(new { message = "This verification link is invalid." })
+            : Ok(new { message = "Email verified. You can sign in now." });   // Verified OR AlreadyVerified
+    }
+
+    [EnableRateLimiting("auth")]
+    [HttpPost("resend-verification")]
+    public async Task<IActionResult> ResendVerification(ForgotPasswordRequest req)
+    {
+        var user = await _auth.PrepareResendAsync(req.Email ?? "");
+        if (user is not null) await SendVerificationEmailAsync(user);
+        return Ok(new { message = "If that account needs verification, a new link is on its way." });
+    }
+
+    private async Task SendVerificationEmailAsync(Models.User user)
+    {
+        var link = $"{_app.FrontendBaseUrl}/verify-email?token={user.EmailVerificationToken}";
+        try
+        {
+            await _email.SendAsync(user.Email, "Verify your CodeSage email",
+                $"<p>Hi {user.DisplayName},</p><p>Confirm your email to activate your account:</p><p><a href=\"{link}\">{link}</a></p>");
+        }
+        catch (Exception ex)
+        {
+            // Never let an email outage break signup. The user can use "resend" once mail is configured.
+            _log.LogWarning(ex, "Verification email to {Email} failed to send", user.Email);
+        }
     }
 
     [HttpPost("refresh")]
@@ -126,8 +168,9 @@ public class AuthController : ControllerBase
             var result = await _oauth.HandleGitHubCallbackAsync(code, linkUser);
             return RedirectToClient(result);
         }
-        catch
+        catch (Exception ex)
         {
+            _log.LogError(ex, "GitHub sign-in failed during callback");
             return RedirectToClient(error: "GitHub sign-in failed. Please try again.");
         }
     }
@@ -153,8 +196,9 @@ public class AuthController : ControllerBase
             var result = await _oauth.HandleGoogleCallbackAsync(code);
             return RedirectToClient(result);
         }
-        catch
+        catch (Exception ex)
         {
+            _log.LogError(ex, "Google sign-in failed during callback");
             return RedirectToClient(error: "Google sign-in failed. Please try again.");
         }
     }

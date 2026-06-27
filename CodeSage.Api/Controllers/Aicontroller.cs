@@ -19,10 +19,11 @@ public class AiController : ControllerBase
     private readonly OrgContext _org;
     private readonly UsageService _usage;
     private readonly AuditService _audit;
+    private readonly NotificationService _notify;
 
-    public AiController(AiService ai, GitHubService github, MongoContext db, OrgContext org, UsageService usage, AuditService audit)
+    public AiController(AiService ai, GitHubService github, MongoContext db, OrgContext org, UsageService usage, AuditService audit, NotificationService notify)
     {
-        _ai = ai; _github = github; _db = db; _org = org; _usage = usage; _audit = audit;
+        _ai = ai; _github = github; _db = db; _org = org; _usage = usage; _audit = audit; _notify = notify;
     }
 
     [HttpPost("explain")]
@@ -35,7 +36,7 @@ public class AiController : ControllerBase
         if (!_ai.IsConfigured)
             return StatusCode(503, new { message = "AI is not configured. Set an API key (or point at a local model) in settings." });
 
-        var (ok, used, limit) = await _usage.CheckAsync(orgId!);
+        var (ok, used, limit) = await _usage.TryConsumeAsync(orgId!, "explain");
         if (!ok)
             return StatusCode(429, new { message = $"This month's AI quota is used up ({used} of {limit}). Upgrade the plan to keep reviewing." });
 
@@ -43,11 +44,11 @@ public class AiController : ControllerBase
         try
         {
             var explanation = await _ai.ExplainCodeAsync(code, req.Path, req.Language);
-            await _usage.IncrementAsync(orgId!, "explain");
             return Ok(new ExplainResponse(explanation));
         }
         catch (Exception ex)
         {
+            await _usage.RefundAsync(orgId!, "explain");   // call failed — give the slot back
             return StatusCode(502, new { message = "The AI request failed. " + ex.Message });
         }
     }
@@ -60,24 +61,26 @@ public class AiController : ControllerBase
         if (!_ai.IsConfigured)
             return StatusCode(503, new { message = "AI is not configured. Set an API key (or point at a local model) in settings." });
 
-        var (ok, used, limit) = await _usage.CheckAsync(orgId!);
+        var (ok, used, limit) = await _usage.TryConsumeAsync(orgId!, "review");
         if (!ok)
             return StatusCode(429, new { message = $"This month's AI quota is used up ({used} of {limit}). Upgrade the plan to keep reviewing." });
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
         var user = await _db.Users.Find(u => u.Id == userId).FirstOrDefaultAsync();
-        if (user is null) return NotFound();
+        if (user is null) { await _usage.RefundAsync(orgId!, "review"); return NotFound(); }
         if (user.GitHubAccessToken is null)
-            return Conflict(new { message = "GitHub is not connected." });
+        { await _usage.RefundAsync(orgId!, "review"); return Conflict(new { message = "GitHub is not connected." }); }
 
         try
         {
             var diff = await _github.GetPullDiffAsync(user.GitHubAccessToken, req.FullName, req.Number);
             if (string.IsNullOrWhiteSpace(diff))
+            {
+                await _usage.RefundAsync(orgId!, "review");
                 return Ok(new ReviewResultDto("This pull request has no diff to review.", new()));
+            }
 
             var result = await _ai.ReviewDiffAsync(diff, $"{req.FullName} #{req.Number}");
-            await _usage.IncrementAsync(orgId!, "review");
 
             // Persist so it shows up under "Recent reviews" on the dashboard.
             await _db.Reviews.InsertOneAsync(new Models.Review
@@ -89,10 +92,12 @@ public class AiController : ControllerBase
                 Summary = result.Summary,
                 CommentCount = result.Comments.Count,
                 CriticalCount = result.Comments.Count(c => c.Severity == "critical"),
+                Comments = result.Comments.Select(c => new Models.ReviewComment { File = c.File, Severity = c.Severity, Comment = c.Comment }).ToList(),
                 RanByUserId = userId!,
                 RanByName = User.FindFirstValue("displayName") ?? "Someone"
             });
             await _audit.LogAsync(orgId!, userId, User.FindFirstValue("displayName") ?? "Someone", "review.ran", $"{req.FullName} #{req.Number}");
+            await _notify.SendToOrgAsync(orgId!, "review.ran", $"AI review finished for {req.FullName} #{req.Number}");
 
             return Ok(result);
         }

@@ -36,6 +36,53 @@ public class UsageService
             u => u.OrgId == orgId && u.Period == period, update, new UpdateOptions { IsUpsert = true });
     }
 
+    // Atomic check-and-increment: increments first, reads the new total in the same op,
+    // and rolls back if it would exceed the cap. This closes the race where two concurrent
+    // requests both pass a separate CheckAsync before either increments.
+    public async Task<(bool ok, int used, int limit)> TryConsumeAsync(string orgId, string kind)
+    {
+        var org = await _db.Organizations.Find(o => o.Id == orgId).FirstOrDefaultAsync();
+        if (org is null) return (true, 0, int.MaxValue);   // unknown org -> don't block
+
+        var limit = PlanCatalog.Get(org.Plan).AiCallsPerMonth;
+        var period = CurrentPeriod;
+
+        var inc = kind == "review"
+            ? Builders<Usage>.Update.Inc(u => u.ReviewCalls, 1)
+            : Builders<Usage>.Update.Inc(u => u.ExplainCalls, 1);
+        var update = inc.SetOnInsert(u => u.OrgId, orgId).SetOnInsert(u => u.Period, period);
+
+        // Return the document AFTER the atomic increment.
+        var updated = await _db.Usage.FindOneAndUpdateAsync<Usage>(
+            u => u.OrgId == orgId && u.Period == period,
+            update,
+            new FindOneAndUpdateOptions<Usage> { IsUpsert = true, ReturnDocument = ReturnDocument.After });
+
+        var used = updated.ExplainCalls + updated.ReviewCalls;
+
+        if (used > limit)
+        {
+            // We went over — undo our own increment so the counter stays truthful.
+            var dec = kind == "review"
+                ? Builders<Usage>.Update.Inc(u => u.ReviewCalls, -1)
+                : Builders<Usage>.Update.Inc(u => u.ExplainCalls, -1);
+            await _db.Usage.UpdateOneAsync(u => u.OrgId == orgId && u.Period == period, dec);
+            return (false, used - 1, limit);
+        }
+
+        return (true, used, limit);
+    }
+
+    // Gives a slot back (e.g. the AI call failed after we consumed one).
+    public Task RefundAsync(string orgId, string kind)
+    {
+        var period = CurrentPeriod;
+        var dec = kind == "review"
+            ? Builders<Usage>.Update.Inc(u => u.ReviewCalls, -1)
+            : Builders<Usage>.Update.Inc(u => u.ExplainCalls, -1);
+        return _db.Usage.UpdateOneAsync(u => u.OrgId == orgId && u.Period == period, dec);
+    }
+
     public async Task<UsageDto> GetCurrentAsync(string orgId)
     {
         var org = await _db.Organizations.Find(o => o.Id == orgId).FirstOrDefaultAsync();

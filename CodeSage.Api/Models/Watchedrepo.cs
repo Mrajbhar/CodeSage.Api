@@ -12,5 +12,12 @@ public class WatchedRepo
     public string OrgId { get; set; } = null!;
     public string RepoFullName { get; set; } = null!;
     public string UserId { get; set; } = null!;
+
+    // Per-repo review configuration.
+    public string MinSeverity { get; set; } = "info";       // info | suggestion | warning | critical
+    public List<string> IgnorePaths { get; set; } = new();  // substrings/globs to skip (e.g. "test/", ".md")
+    public List<string> FileTypes { get; set; } = new();    // extensions to include (empty = all), e.g. [".cs",".ts"]
+    public bool PostToGitHub { get; set; } = true;          // comment findings back on the PR
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

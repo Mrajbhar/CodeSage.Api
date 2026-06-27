@@ -27,3 +27,5 @@ public record ResetPasswordRequest(string Token, string NewPassword);
 
 public record ChangePasswordRequest(string? CurrentPassword, string NewPassword);
 public record ChangeEmailRequest(string NewEmail);
+
+public record VerifyEmailRequest(string Token);

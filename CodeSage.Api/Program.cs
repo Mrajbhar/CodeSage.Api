@@ -68,9 +68,14 @@ var mongoUrl = new MongoDB.Driver.MongoUrl(mongoCfg.ConnectionString);
 var hangfireDb = string.IsNullOrWhiteSpace(mongoUrl.DatabaseName) ? "codesage" : mongoUrl.DatabaseName;
 builder.Services.AddHangfire(cfg => cfg.UseMongoStorage(
     mongoCfg.ConnectionString, hangfireDb + "_jobs",
-    new MongoStorageOptions { MigrationOptions = new MongoMigrationOptions {
-        MigrationStrategy = new MigrateMongoMigrationStrategy(),
-        BackupStrategy = new NoneMongoBackupStrategy() } }));
+    new MongoStorageOptions
+    {
+        MigrationOptions = new MongoMigrationOptions
+        {
+            MigrationStrategy = new MigrateMongoMigrationStrategy(),
+            BackupStrategy = new NoneMongoBackupStrategy()
+        }
+    }));
 builder.Services.AddHangfireServer();
 
 // ---- Rate limiting (built-in, no package) ----
@@ -170,8 +175,11 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<NotificationsHub>("/hub/notifications").DisableRateLimiting();
 
-// Hangfire dashboard (dev: open; lock this down before production)
-app.UseHangfireDashboard("/hangfire");
+// Hangfire dashboard — admin-only outside Development.
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new CodeSage.Api.Infrastructure.HangfireAuthFilter(app.Environment.IsDevelopment()) }
+});
 RecurringJob.AddOrUpdate<BackgroundJobs>("audit-cleanup", j => j.CleanupAuditLogs(), Cron.Daily);
 
 app.Run();

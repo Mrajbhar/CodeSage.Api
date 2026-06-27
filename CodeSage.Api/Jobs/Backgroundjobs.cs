@@ -33,35 +33,46 @@ public class BackgroundJobs
         var user = await _db.Users.Find(u => u.Id == userId).FirstOrDefaultAsync();
         if (user?.GitHubAccessToken is null) return;
 
-        // Respect the org's monthly quota even for automated runs.
-        var (ok, _, _) = await _usage.CheckAsync(orgId);
+        // Respect the org's monthly quota even for automated runs (atomic consume).
+        var (ok, _, _) = await _usage.TryConsumeAsync(orgId, "review");
         if (!ok) { await _notify.SendToOrgAsync(orgId, "quota", $"Auto-review skipped for {fullName} #{number}: monthly quota reached."); return; }
 
         var diff = await _github.GetPullDiffAsync(user.GitHubAccessToken, fullName, number);
-        if (string.IsNullOrWhiteSpace(diff)) return;
+        if (string.IsNullOrWhiteSpace(diff)) { await _usage.RefundAsync(orgId, "review"); return; }
 
         var result = await _ai.ReviewDiffAsync(diff, $"{fullName} #{number}");
-        await _usage.IncrementAsync(orgId, "review");
+
+        // Apply this repo's review settings (severity threshold, ignore paths, file types).
+        var watch = await _db.WatchedRepos.Find(w => w.OrgId == orgId && w.RepoFullName == fullName).FirstOrDefaultAsync();
+        var comments = ApplySettings(result.Comments, watch);
 
         await _db.Reviews.InsertOneAsync(new Models.Review
         {
-            OrgId = orgId, RepoFullName = fullName, PullNumber = number,
+            OrgId = orgId,
+            RepoFullName = fullName,
+            PullNumber = number,
             Title = string.IsNullOrWhiteSpace(title) ? $"{fullName} #{number}" : title,
-            Summary = result.Summary, CommentCount = result.Comments.Count,
-            CriticalCount = result.Comments.Count(c => c.Severity == "critical"),
-            RanByUserId = "system", RanByName = "CodeSage (auto)"
+            Summary = result.Summary,
+            CommentCount = comments.Count,
+            CriticalCount = comments.Count(c => c.Severity == "critical"),
+            Comments = comments.Select(c => new Models.ReviewComment { File = c.File, Severity = c.Severity, Comment = c.Comment }).ToList(),
+            RanByUserId = "system",
+            RanByName = "CodeSage (auto)"
         });
 
-        // Post the findings back onto the GitHub PR.
-        try
+        // Post the findings back onto the GitHub PR (unless disabled for this repo).
+        if (watch?.PostToGitHub != false && comments.Count > 0)
         {
-            var body = $"## 🔍 CodeSage review\n\n{result.Summary}\n\n" +
-                string.Join("\n", result.Comments.Select(c => $"- **{c.Severity}** {(c.File is null ? "" : $"`{c.File}` — ")}{c.Comment}"));
-            await _github.PostIssueCommentAsync(user.GitHubAccessToken, fullName, number, body);
+            try
+            {
+                var body = $"## 🔍 CodeSage review\n\n{result.Summary}\n\n" +
+                    string.Join("\n", comments.Select(c => $"- **{c.Severity}** {(c.File is null ? "" : $"`{c.File}` — ")}{c.Comment}"));
+                await _github.PostIssueCommentAsync(user.GitHubAccessToken, fullName, number, body);
+            }
+            catch { /* don't fail the job if commenting back fails */ }
         }
-        catch { /* don't fail the job if commenting back fails */ }
 
-        await _notify.SendToOrgAsync(orgId, "review.ran", $"Auto-reviewed {fullName} #{number} — {result.Comments.Count} findings");
+        await _notify.SendToOrgAsync(orgId, "review.ran", $"Auto-reviewed {fullName} #{number} — {comments.Count} findings");
     }
 
     // Recurring: trim audit logs older than 90 days.
@@ -69,5 +80,30 @@ public class BackgroundJobs
     {
         var cutoff = DateTime.UtcNow.AddDays(-90);
         await _db.AuditLogs.DeleteManyAsync(a => a.CreatedAt < cutoff);
+    }
+
+    private static readonly Dictionary<string, int> SevRank = new()
+    { ["info"] = 0, ["suggestion"] = 1, ["warning"] = 2, ["critical"] = 3 };
+
+    // Filters AI findings by the repo's settings: severity floor, ignored paths, allowed file types.
+    private static List<Dtos.ReviewCommentDto> ApplySettings(List<Dtos.ReviewCommentDto> comments, Models.WatchedRepo? w)
+    {
+        if (w is null) return comments;
+        var floor = SevRank.TryGetValue(w.MinSeverity, out var f) ? f : 0;
+
+        return comments.Where(c =>
+        {
+            var rank = SevRank.TryGetValue(c.Severity, out var r) ? r : 0;
+            if (rank < floor) return false;
+
+            var file = c.File ?? "";
+            if (w.IgnorePaths.Any(p => !string.IsNullOrWhiteSpace(p) && file.Contains(p, StringComparison.OrdinalIgnoreCase)))
+                return false;
+            if (w.FileTypes.Count > 0 && !string.IsNullOrEmpty(file) &&
+                !w.FileTypes.Any(ext => file.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+                return false;
+
+            return true;
+        }).ToList();
     }
 }

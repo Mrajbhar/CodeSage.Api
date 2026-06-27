@@ -16,7 +16,15 @@ public class Review
     public string Summary { get; set; } = "";
     public int CommentCount { get; set; }
     public int CriticalCount { get; set; }
+    public List<ReviewComment> Comments { get; set; } = new();
     public string RanByUserId { get; set; } = null!;
     public string RanByName { get; set; } = null!;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public class ReviewComment
+{
+    public string? File { get; set; }
+    public string Severity { get; set; } = "info";
+    public string Comment { get; set; } = "";
 }

@@ -16,7 +16,8 @@ public class AuthService
         _tokens = tokens;
     }
 
-    public async Task<AuthResponse?> RegisterAsync(RegisterRequest req)
+    // Returns the created user (caller sends the verification email), or null if the email is taken.
+    public async Task<User?> RegisterAsync(RegisterRequest req)
     {
         var existing = await _db.Users.Find(u => u.Email == req.Email).FirstOrDefaultAsync();
         if (existing is not null) return null;
@@ -26,19 +27,50 @@ public class AuthService
             Email = req.Email,
             DisplayName = req.DisplayName,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.Password),
-            Role = await IsFirstUserAsync() ? "Admin" : "User"
+            Role = await IsFirstUserAsync() ? "Admin" : "User",
+            EmailVerified = false,
+            EmailVerificationToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24)).ToLowerInvariant()
         };
 
         await _db.Users.InsertOneAsync(user);
-        return await IssueForUserAsync(user);
+        return user;   // NOT logged in yet — must verify first
     }
 
-    public async Task<AuthResponse?> LoginAsync(LoginRequest req)
+    // (resp, error): error "verify" => valid creds but email not verified.
+    public async Task<(AuthResponse? resp, string? error)> LoginAsync(LoginRequest req)
     {
         var user = await _db.Users.Find(u => u.Email == req.Email).FirstOrDefaultAsync();
-        if (user?.PasswordHash is null) return null;
-        if (!BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash)) return null;
-        return await IssueForUserAsync(user);
+        if (user?.PasswordHash is null) return (null, null);
+        if (!BCrypt.Net.BCrypt.Verify(req.Password, user.PasswordHash)) return (null, null);
+        if (!user.EmailVerified) return (null, "verify");
+        return (await IssueForUserAsync(user), null);
+    }
+
+    public enum VerifyResult { Verified, AlreadyVerified, Invalid }
+
+    public async Task<VerifyResult> VerifyEmailAsync(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return VerifyResult.Invalid;
+
+        var user = await _db.Users.Find(u => u.EmailVerificationToken == token).FirstOrDefaultAsync();
+        if (user is null) return VerifyResult.Invalid;
+        if (user.EmailVerified) return VerifyResult.AlreadyVerified;
+
+        user.EmailVerified = true;
+        // Keep the token so a repeat click (StrictMode double-fire, refresh, re-open)
+        // still resolves to this user and returns AlreadyVerified instead of "invalid".
+        await _db.Users.ReplaceOneAsync(u => u.Id == user.Id, user);
+        return VerifyResult.Verified;
+    }
+
+    // Regenerates a token for an unverified account; returns it so the caller can email it. Null if nothing to do.
+    public async Task<User?> PrepareResendAsync(string email)
+    {
+        var user = await _db.Users.Find(u => u.Email == email.ToLowerInvariant()).FirstOrDefaultAsync();
+        if (user is null || user.EmailVerified) return null;
+        user.EmailVerificationToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+        await _db.Users.ReplaceOneAsync(u => u.Id == user.Id, user);
+        return user;
     }
 
     public async Task<AuthResponse?> RefreshAsync(string refreshToken)

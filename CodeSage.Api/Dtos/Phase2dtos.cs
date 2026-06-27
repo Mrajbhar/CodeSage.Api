@@ -14,3 +14,8 @@ public record ReviewSummaryDto(
     int CommentCount, int CriticalCount, string RanByName, DateTime CreatedAt);
 
 public record WatchRequest(string FullName);
+
+public record ReviewDetailDto(string Id, string RepoFullName, int PullNumber, string Title, string Summary,
+    int CommentCount, int CriticalCount, string RanByName, DateTime CreatedAt, List<ReviewCommentDto> Comments);
+
+public record RepoSettingsDto(string RepoFullName, string MinSeverity, List<string> IgnorePaths, List<string> FileTypes, bool PostToGitHub);

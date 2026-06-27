@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using CodeSage.Api.Data;
 using CodeSage.Api.Dtos;
 using CodeSage.Api.Models;
@@ -6,6 +5,7 @@ using CodeSage.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MongoDB.Driver;
+using System.Security.Claims;
 
 namespace CodeSage.Api.Controllers;
 
@@ -55,6 +55,36 @@ public class GitHubController : ControllerBase
         if (err is not null) return err;
         await _db.WatchedRepos.DeleteManyAsync(w => w.OrgId == orgId && w.RepoFullName == fullName);
         return Ok(new { watching = false });
+    }
+
+    // Read a watched repo's review settings.
+    [HttpGet("watch/settings")]
+    public async Task<IActionResult> GetSettings([FromQuery] string fullName)
+    {
+        var (orgId, err) = await _org.ResolveAsync();
+        if (err is not null) return err;
+        var w = await _db.WatchedRepos.Find(x => x.OrgId == orgId && x.RepoFullName == fullName).FirstOrDefaultAsync();
+        if (w is null) return NotFound(new { message = "This repo isn't being watched." });
+        return Ok(new RepoSettingsDto(w.RepoFullName, w.MinSeverity, w.IgnorePaths, w.FileTypes, w.PostToGitHub));
+    }
+
+    // Update a watched repo's review settings.
+    [HttpPut("watch/settings")]
+    public async Task<IActionResult> UpdateSettings([FromBody] RepoSettingsDto req)
+    {
+        var (orgId, err) = await _org.ResolveAsync();
+        if (err is not null) return err;
+
+        var update = Builders<Models.WatchedRepo>.Update
+            .Set(w => w.MinSeverity, req.MinSeverity)
+            .Set(w => w.IgnorePaths, req.IgnorePaths ?? new())
+            .Set(w => w.FileTypes, req.FileTypes ?? new())
+            .Set(w => w.PostToGitHub, req.PostToGitHub);
+
+        var res = await _db.WatchedRepos.UpdateOneAsync(
+            w => w.OrgId == orgId && w.RepoFullName == req.RepoFullName, update);
+        if (res.MatchedCount == 0) return NotFound(new { message = "This repo isn't being watched." });
+        return Ok(new { ok = true });
     }
 
     [HttpGet("repos")]

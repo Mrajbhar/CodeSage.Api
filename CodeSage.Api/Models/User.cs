@@ -23,6 +23,9 @@ public class User
     // Google link
     public string? GoogleId { get; set; }
 
+    public bool EmailVerified { get; set; } = false;
+    public string? EmailVerificationToken { get; set; }
+
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetExpires { get; set; }
 
