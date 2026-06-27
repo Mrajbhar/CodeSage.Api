@@ -70,6 +70,7 @@ builder.Services.AddHangfire(cfg => cfg.UseMongoStorage(
     mongoCfg.ConnectionString, hangfireDb + "_jobs",
     new MongoStorageOptions
     {
+        CheckConnection = false,   // don't crash the whole app if Mongo is briefly unreachable at boot
         MigrationOptions = new MongoMigrationOptions
         {
             MigrationStrategy = new MigrateMongoMigrationStrategy(),
