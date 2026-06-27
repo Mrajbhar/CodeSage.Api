@@ -74,4 +74,9 @@ public class EmailSettings
     public bool UseSsl { get; set; } = true;
     public string FromAddress { get; set; } = "no-reply@codesage.local";
     public string FromName { get; set; } = "CodeSage";
+
+    // Set to "brevo" to send via the Brevo HTTP API (uses ApiKey).
+    // Leave blank to use SMTP (Host/Username/Password) or console if Host is empty.
+    public string Provider { get; set; } = "";
+    public string ApiKey { get; set; } = "";
 }

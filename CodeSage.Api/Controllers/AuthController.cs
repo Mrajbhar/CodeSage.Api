@@ -78,7 +78,13 @@ public class AuthController : ControllerBase
         try
         {
             await _email.SendAsync(user.Email, "Verify your CodeSage email",
-                $"<p>Hi {user.DisplayName},</p><p>Confirm your email to activate your account:</p><p><a href=\"{link}\">{link}</a></p>");
+                EmailTemplate(
+                    heading: "Verify your email",
+                    greeting: $"Hi {user.DisplayName},",
+                    body: "Thanks for signing up for CodeSage. Confirm your email address to activate your account.",
+                    buttonText: "Verify email",
+                    buttonUrl: link,
+                    footer: "If you didn't create a CodeSage account, you can safely ignore this email."));
         }
         catch (Exception ex)
         {
@@ -86,6 +92,20 @@ public class AuthController : ControllerBase
             _log.LogWarning(ex, "Verification email to {Email} failed to send", user.Email);
         }
     }
+
+    // Simple, clean, inline-styled HTML email (inline styles survive email clients).
+    private static string EmailTemplate(string heading, string greeting, string body, string buttonText, string buttonUrl, string footer)
+        => $@"<div style=""font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#0a0e14;padding:32px;color:#e6edf3"">
+  <div style=""max-width:480px;margin:0 auto;background:#111722;border:1px solid #1f2733;border-radius:14px;padding:32px"">
+    <div style=""font-size:18px;font-weight:600;color:#2dd4bf;margin-bottom:24px"">◇ CodeSage</div>
+    <h1 style=""font-size:20px;font-weight:600;margin:0 0 16px;color:#fff"">{heading}</h1>
+    <p style=""margin:0 0 8px;color:#c2ccd6"">{greeting}</p>
+    <p style=""margin:0 0 24px;color:#9aa6b2;line-height:1.6"">{body}</p>
+    <a href=""{buttonUrl}"" style=""display:inline-block;background:#2dd4bf;color:#06231f;font-weight:600;text-decoration:none;padding:11px 22px;border-radius:8px"">{buttonText}</a>
+    <p style=""margin:24px 0 0;font-size:13px;color:#5b6673;line-height:1.6"">{footer}</p>
+    <p style=""margin:8px 0 0;font-size:12px;color:#3d4550;word-break:break-all"">Or paste this link: {buttonUrl}</p>
+  </div>
+</div>";
 
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh(RefreshRequest req)
@@ -116,7 +136,13 @@ public class AuthController : ControllerBase
 
             var link = $"{_app.FrontendBaseUrl}/reset-password?token={user.PasswordResetToken}";
             await _email.SendAsync(user.Email, "Reset your CodeSage password",
-                $"<p>Hi {user.DisplayName},</p><p>Reset your password with the link below (valid for 1 hour):</p><p><a href=\"{link}\">{link}</a></p><p>If you didn't request this, ignore this email.</p>");
+                EmailTemplate(
+                    heading: "Reset your password",
+                    greeting: $"Hi {user.DisplayName},",
+                    body: "We received a request to reset your CodeSage password. This link is valid for 1 hour.",
+                    buttonText: "Reset password",
+                    buttonUrl: link,
+                    footer: "If you didn't request this, you can safely ignore this email — your password won't change."));
         }
         return Ok(new { message = "If that email is registered, a reset link is on its way." });
     }

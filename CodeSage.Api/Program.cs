@@ -39,10 +39,13 @@ builder.Services.AddScoped<BillingService>();
 builder.Services.AddScoped<OrgContext>();
 builder.Services.AddScoped<AuditService>();
 var emailCfg = builder.Configuration.GetSection("Email").Get<EmailSettings>() ?? new EmailSettings();
-if (string.IsNullOrWhiteSpace(emailCfg.Host))
-    builder.Services.AddScoped<IEmailSender, ConsoleEmailSender>();
+if (string.Equals(emailCfg.Provider, "brevo", StringComparison.OrdinalIgnoreCase)
+    && !string.IsNullOrWhiteSpace(emailCfg.ApiKey))
+    builder.Services.AddScoped<IEmailSender, BrevoEmailSender>();   // HTTP API (works where SMTP is blocked)
+else if (!string.IsNullOrWhiteSpace(emailCfg.Host))
+    builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();    // classic SMTP
 else
-    builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+    builder.Services.AddScoped<IEmailSender, ConsoleEmailSender>(); // dev: print to console
 builder.Services.AddScoped<CacheService>();
 builder.Services.AddScoped<EmbeddingService>();
 builder.Services.AddScoped<IndexService>();

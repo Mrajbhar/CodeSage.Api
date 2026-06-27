@@ -7,6 +7,10 @@
       "RelativeMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|solutionrelative:codesage.api\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
     },
     {
+      "AbsoluteMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|d:\\codesage.api\\codesage.api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|solutionrelative:codesage.api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|d:\\codesage.api\\codesage.api\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|solutionrelative:codesage.api\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -17,10 +21,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|d:\\codesage.api\\codesage.api\\codesage.api.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
       "RelativeMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|solutionrelative:codesage.api\\codesage.api.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|d:\\codesage.api\\codesage.api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|solutionrelative:codesage.api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{3EA20866-E15F-91C8-153D-1B8F9E96F748}|CodeSage.Api\\CodeSage.Api.csproj|d:\\codesage.api\\codesage.api\\infrastructure\\hangfireauthfilter.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -242,8 +242,7 @@
               "RelativeToolTip": "CodeSage.Api\\Infrastructure\\Hangfireauthfilter.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABgAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T10:17:20.904Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T10:17:20.904Z"
             },
             {
               "$type": "Document",
@@ -259,29 +258,27 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 1,
               "Title": "Program.cs",
               "DocumentMoniker": "D:\\CodeSage.Api\\CodeSage.Api\\Program.cs",
               "RelativeDocumentMoniker": "CodeSage.Api\\Program.cs",
               "ToolTip": "D:\\CodeSage.Api\\CodeSage.Api\\Program.cs",
               "RelativeToolTip": "CodeSage.Api\\Program.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAALgAAAAKAAAAAAAAAA==",
+              "ViewState": "AgIAAJwAAAAAAAAAAAAkwK8AAAAVAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T03:22:52.779Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T03:22:52.779Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 2,
               "Title": "AuthController.cs",
               "DocumentMoniker": "D:\\CodeSage.Api\\CodeSage.Api\\Controllers\\AuthController.cs",
               "RelativeDocumentMoniker": "CodeSage.Api\\Controllers\\AuthController.cs",
               "ToolTip": "D:\\CodeSage.Api\\CodeSage.Api\\Controllers\\AuthController.cs",
               "RelativeToolTip": "CodeSage.Api\\Controllers\\AuthController.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAANsAAAABAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAsAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T03:22:52.762Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T03:22:52.762Z"
             },
             {
               "$type": "Document",
@@ -303,7 +300,7 @@
               "RelativeDocumentMoniker": "CodeSage.Api\\appsettings.json",
               "ToolTip": "D:\\CodeSage.Api\\CodeSage.Api\\appsettings.json",
               "RelativeToolTip": "CodeSage.Api\\appsettings.json",
-              "ViewState": "AgIAAA8AAAAAAAAAAAAwwCQAAAAEAAAAAAAAAA==",
+              "ViewState": "AgIAACQAAAAAAAAAAAAAADsAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
               "WhenOpened": "2026-06-27T03:22:52.781Z",
               "EditorCaption": ""
@@ -330,8 +327,7 @@
               "RelativeToolTip": "CodeSage.Api\\Controllers\\Aicontroller.cs",
               "ViewState": "AgIAABwAAAAAAAAAAAAgwGwAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T03:22:52.854Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T03:22:52.854Z"
             },
             {
               "$type": "Document",
@@ -343,12 +339,11 @@
               "RelativeToolTip": "CodeSage.Api\\Jobs\\Backgroundjobs.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAGwAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T03:22:52.813Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T03:22:52.813Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 3,
               "Title": "Auditcontroller.cs",
               "DocumentMoniker": "D:\\CodeSage.Api\\CodeSage.Api\\Controllers\\Auditcontroller.cs",
               "RelativeDocumentMoniker": "CodeSage.Api\\Controllers\\Auditcontroller.cs",
@@ -356,8 +351,7 @@
               "RelativeToolTip": "CodeSage.Api\\Controllers\\Auditcontroller.cs",
               "ViewState": "AgIAADIAAAAAAAAAAAAwwEUAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T03:22:52.761Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T03:22:52.761Z"
             },
             {
               "$type": "Document",
@@ -369,12 +363,11 @@
               "RelativeToolTip": "CodeSage.Api\\Models\\Watchedrepo.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABYAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T10:04:18.727Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T10:04:18.727Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 4,
               "Title": "CodeSage.Api.csproj",
               "DocumentMoniker": "D:\\CodeSage.Api\\CodeSage.Api\\CodeSage.Api.csproj",
               "RelativeDocumentMoniker": "CodeSage.Api\\CodeSage.Api.csproj",
@@ -382,8 +375,7 @@
               "RelativeToolTip": "CodeSage.Api\\CodeSage.Api.csproj",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAABjAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
-              "WhenOpened": "2026-06-27T03:22:52.784Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T03:22:52.784Z"
             },
             {
               "$type": "Document",
@@ -431,8 +423,7 @@
               "RelativeToolTip": "CodeSage.Api\\Dtos\\Phase2dtos.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABQAAACMAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T03:22:52.865Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T03:22:52.865Z"
             },
             {
               "$type": "Document",
@@ -444,8 +435,7 @@
               "RelativeToolTip": "CodeSage.Api\\Controllers\\GitHubController.cs",
               "ViewState": "AgIAAHMAAAAAAAAAAAAiwIQAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T03:22:52.831Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T03:22:52.831Z"
             },
             {
               "$type": "Document",
@@ -469,8 +459,7 @@
               "RelativeToolTip": "CodeSage.Api\\Services\\Usageservice.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAG8AAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T03:22:52.861Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T03:22:52.861Z"
             },
             {
               "$type": "Document",
@@ -482,8 +471,7 @@
               "RelativeToolTip": "CodeSage.Api\\Controllers\\Notificationscontroller.cs",
               "ViewState": "AgIAABUAAAAAAAAAAAAowDgAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-27T10:09:37.035Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-27T10:09:37.035Z"
             },
             {
               "$type": "Document",
